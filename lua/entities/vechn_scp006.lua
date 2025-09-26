@@ -13,7 +13,7 @@ local SOUND_INTERVAL = 3
 local EFFECT_COUNT   = 6
 local EFFECT_NAME    = "watersplash"
 local SOUND_NAME     = "ambient/water/water_flow_loop1.wav"
-local SOUND_LEVEL    = 60  
+local SOUND_LEVEL    = 40 
 local SOUND_PITCH    = 100
 
 if SERVER then
@@ -33,7 +33,6 @@ if SERVER then
         timer.Create("SCP006_Healing_" .. self:EntIndex(), HEAL_INTERVAL, 0, function()
             if not IsValid(self) then return end
             self:HealPlayersInRange()
-            self:SpawnEffects()
         end)
 
         timer.Create("SCP006_Sound_" .. self:EntIndex(), SOUND_INTERVAL, 0, function()
@@ -43,7 +42,6 @@ if SERVER then
     end
 
     function ENT:SpawnEffects()
-    
         local mins, maxs = self:OBBMins(), self:OBBMaxs()
         for i = 1, EFFECT_COUNT do
             local localpos = Vector(
@@ -52,21 +50,32 @@ if SERVER then
                 math.Rand(mins.z, maxs.z)
             )
             local worldpos = self:LocalToWorld(localpos) + Vector(0, 0, 5)
-            local ed = EffectData()
-            ed:SetOrigin(worldpos)
-            util.Effect(EFFECT_NAME, ed, true, true)
+
+            local effectdata = EffectData()
+            effectdata:SetOrigin(worldpos)
+            effectdata:SetScale(1)
+            effectdata:SetMagnitude(1)
+            util.Effect(EFFECT_NAME, effectdata, true, true)
         end
     end
 
     function ENT:HealPlayersInRange()
         local radius = 200
         local entsInSphere = ents.FindInSphere(self:GetPos(), radius)
-
         for _, ply in ipairs(entsInSphere) do
             if ply:IsPlayer() and ply:Alive() then
                 local maxHealth = ply:GetMaxHealth() or 100
-                if ply:Health() < maxHealth then
-                    ply:SetHealth(math.min(maxHealth, ply:Health() + HEAL_AMOUNT))
+                local oldHealth = ply:Health()
+
+                if oldHealth < maxHealth then
+                    local newHealth = math.min(maxHealth, oldHealth + HEAL_AMOUNT)
+                    ply:SetHealth(newHealth)
+
+                    local effectdata = EffectData()
+                    effectdata:SetOrigin(ply:GetPos() + Vector(0, 0, 10))
+                    effectdata:SetScale(1.5)
+                    effectdata:SetColor(0, 255, 0)
+                    util.Effect("BloodImpact", effectdata, true, true)
                 end
 
                 if ply:IsOnFire() then
@@ -87,17 +96,19 @@ if SERVER then
                     end
                 end
 
-              
+                local effectdata = EffectData()
+                effectdata:SetOrigin(ply:GetPos() + Vector(0, 0, 20))
+                effectdata:SetColor(0, 255, 0)
+                util.Effect("BloodImpact", effectdata, true, true)
+
                 if ply.CurePoison then pcall(ply.CurePoison, ply) end
                 if ply.ClearPoison then pcall(ply.ClearPoison, ply) end
                 if ply.RemovePoison then pcall(ply.RemovePoison, ply) end
 
-                
                 local sid = ply:SteamID()
                 timer.Remove("PoisonTimer_" .. sid)
                 timer.Remove("poison_timer_" .. sid)
                 timer.Remove("poison_" .. sid)
-
             end
         end
     end
@@ -109,19 +120,47 @@ if SERVER then
 end
 
 if CLIENT then
- 
+    local waterSound = nil
+
+    function ENT:Initialize()
+        self:DrawModel()
+        waterSound = CreateSound(self, "ambient/water/water_flow_loop1.wav")
+        waterSound:Play()
+    end
+
+    function ENT:Think()
+        if not IsValid(self) then return end
+        if not waterSound then return end
+        local player = LocalPlayer()
+        if not IsValid(player) then return end
+
+        local distance = self:GetPos():Distance(player:GetPos())
+
+        local maxDistance = 1000 
+        local volume = math.Clamp(1 - (distance / maxDistance), 0, 1)
+
+        waterSound:ChangeVolume(volume, 0.1)
+    end
+
+    function ENT:OnRemove()
+        if waterSound then
+            waterSound:Stop()
+            waterSound = nil
+        end
+    end
+
     function ENT:Draw()
         self:DrawModel()
 
         local dlight = DynamicLight(self:EntIndex())
         if dlight then
             dlight.pos = self:GetPos() + Vector(0, 0, 10)
-            dlight.r = 100
-            dlight.g = 180
+            dlight.r = 255
+            dlight.g = 255
             dlight.b = 255
-            dlight.brightness = 2
+            dlight.brightness = 8 
             dlight.Decay = 500
-            dlight.Size = 200
+            dlight.Size = 200 
             dlight.DieTime = CurTime() + 1
         end
     end
